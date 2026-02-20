@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  role         String   @default("NEW_HIRE") // HR_ADMIN, MANAGER, NEW_HIRE
+  department   String?
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  createdTemplates Template[]   @relation("TemplateCreator")
+  onboardingsAsHire    Onboarding[] @relation("OnboardingNewHire")
+  onboardingsAsManager Onboarding[] @relation("OnboardingManager")
+  onboardingsAsBuddy   Onboarding[] @relation("OnboardingBuddy")
+
+  @@map("users")
+}
+
+model Template {
+  id         String   @id @default(cuid())
+  name       String
+  department String?
+  roleTarget String?  @map("role_target")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdById String  @map("created_by_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy   User           @relation("TemplateCreator", fields: [createdById], references: [id])
+  tasks       TemplateTask[]
+  onboardings Onboarding[]
+
+  @@map("templates")
+}
+
+model TemplateTask {
+  id              String  @id @default(cuid())
+  templateId      String  @map("template_id")
+  dayNumber       Int     @map("day_number") // 1-90
+  weekNumber      Int     @map("week_number") // 1-13
+  title           String
+  description     String?
+  taskType        String  @map("task_type") // READ, MEETING, DO_SUBMIT, ACKNOWLEDGE
+  requiresApproval Boolean @default(false) @map("requires_approval")
+  sortOrder       Int     @default(0) @map("sort_order")
+
+  // Relations
+  template     Template       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  taskProgress TaskProgress[]
+
+  @@map("template_tasks")
+}
+
+model Onboarding {
+  id         String   @id @default(cuid())
+  newHireId  String   @map("new_hire_id")
+  managerId  String   @map("manager_id")
+  buddyId    String?  @map("buddy_id")
+  templateId String   @map("template_id")
+  startDate  DateTime @map("start_date")
+  status     String   @default("ACTIVE") // ACTIVE, COMPLETED, PAUSED
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  newHire      User           @relation("OnboardingNewHire", fields: [newHireId], references: [id])
+  manager      User           @relation("OnboardingManager", fields: [managerId], references: [id])
+  buddy        User?          @relation("OnboardingBuddy", fields: [buddyId], references: [id])
+  template     Template       @relation(fields: [templateId], references: [id])
+  taskProgress TaskProgress[]
+  checkIns     CheckIn[]
+
+  @@map("onboardings")
+}
+
+model TaskProgress {
+  id             String    @id @default(cuid())
+  onboardingId   String    @map("onboarding_id")
+  templateTaskId String    @map("template_task_id")
+  status         String    @default("PENDING") // PENDING, IN_PROGRESS, DONE, APPROVED
+  evidenceUrl    String?   @map("evidence_url")
+  notes          String?
+  completedAt    DateTime? @map("completed_at")
+  approvedAt     DateTime? @map("approved_at")
+
+  // Relations
+  onboarding   Onboarding   @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  templateTask TemplateTask @relation(fields: [templateTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([onboardingId, templateTaskId])
+  @@map("task_progress")
+}
+
+model CheckIn {
+  id           String    @id @default(cuid())
+  onboardingId String    @map("onboarding_id")
+  scheduledDay Int       @map("scheduled_day") // 7, 30, 60, 90
+  status       String    @default("PENDING") // PENDING, SUBMITTED, REVIEWED
+  submittedAt  DateTime? @map("submitted_at")
+  reviewedAt   DateTime? @map("reviewed_at")
+
+  // Relations
+  onboarding Onboarding      @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  responses  CheckInResponse[]
+
+  @@unique([onboardingId, scheduledDay])
+  @@map("check_ins")
+}
+
+model CheckInResponse {
+  id         String @id @default(cuid())
+  checkInId  String @map("check_in_id")
+  question   String
+  answer     String?
+  rating     Int?   // 1-5 scale
+  visibility String @default("MANAGER_HR") // MANAGER_HR, HR_ONLY
+
+  // Relations
+  checkIn CheckIn @relation(fields: [checkInId], references: [id], onDelete: Cascade)
+
+  @@map("check_in_responses")
+}
+
+model CheckInQuestion {
+  id           String @id @default(cuid())
+  scheduledDay Int    @map("scheduled_day") // 7, 30, 60, 90
+  question     String
+  sortOrder    Int    @default(0) @map("sort_order")
+
+  @@map("check_in_questions")
+}
+
+model Milestone {
+  id          String  @id @default(cuid())
+  day         Int     @unique
+  label       String
+  description String?
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  @@map("milestones")
+}
+
+model BuddyTouchpoint {
+  id          String  @id @default(cuid())
+  day         Int     // Day number for touchpoint
+  label       String
+  description String?
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  @@map("buddy_touchpoints")
+}
+
+model BuddyTip {
+  id        String @id @default(cuid())
+  tip       String
+  sortOrder Int    @default(0) @map("sort_order")
+
+  @@map("buddy_tips")
+}
